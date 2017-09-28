@@ -24,9 +24,8 @@ import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.VersionType;
-import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.mapper.SourceToParse;
-import org.elasticsearch.index.seqno.SequenceNumbersService;
+import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.IndexShardTestCase;
 import org.elasticsearch.index.shard.ShardId;
@@ -59,10 +58,10 @@ public class PeerRecoveryTargetServiceTests extends IndexShardTestCase {
             final String index = replica.shardId().getIndexName();
             long seqNo = 0;
             for (int i = 0; i < docs; i++) {
-                Engine.Index indexOp = replica.prepareIndexOnReplica(
+                replica.applyIndexOperationOnReplica(seqNo++, 1, VersionType.EXTERNAL,
+                    IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP, false,
                     SourceToParse.source(index, "type", "doc_" + i, new BytesArray("{}"), XContentType.JSON),
-                    seqNo++, replica.getPrimaryTerm(), 1, VersionType.EXTERNAL, IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP, false);
-                replica.index(indexOp);
+                    update -> {});
                 if (rarely()) {
                     // insert a gap
                     seqNo++;
@@ -74,11 +73,11 @@ public class PeerRecoveryTargetServiceTests extends IndexShardTestCase {
 
             translogLocation.set(replica.getTranslog().location());
 
-            assertThat(PeerRecoveryTargetService.getStartingSeqNo(recoveryTarget), equalTo(SequenceNumbersService.UNASSIGNED_SEQ_NO));
-
             final Translog translog = replica.getTranslog();
-            translogLocation.set(
-                    writeTranslog(replica.shardId(), translog.getTranslogUUID(), translog.currentFileGeneration(), maxSeqNo - 1));
+            final String translogUUID = translog.getTranslogUUID();
+            assertThat(PeerRecoveryTargetService.getStartingSeqNo(recoveryTarget), equalTo(SequenceNumbers.UNASSIGNED_SEQ_NO));
+
+            translogLocation.set(writeTranslog(replica.shardId(), translogUUID, translog.currentFileGeneration(), maxSeqNo - 1));
 
             // commit is good, global checkpoint is at least max *committed* which is NO_OPS_PERFORMED
             assertThat(PeerRecoveryTargetService.getStartingSeqNo(recoveryTarget), equalTo(0L));
@@ -88,10 +87,9 @@ public class PeerRecoveryTargetServiceTests extends IndexShardTestCase {
             translogLocation.set(replica.getTranslog().location());
 
             // commit is not good, global checkpoint is below max
-            assertThat(PeerRecoveryTargetService.getStartingSeqNo(recoveryTarget), equalTo(SequenceNumbersService.UNASSIGNED_SEQ_NO));
+            assertThat(PeerRecoveryTargetService.getStartingSeqNo(recoveryTarget), equalTo(SequenceNumbers.UNASSIGNED_SEQ_NO));
 
-            translogLocation.set(
-                    writeTranslog(replica.shardId(), translog.getTranslogUUID(), translog.currentFileGeneration(), maxSeqNo));
+            translogLocation.set(writeTranslog(replica.shardId(), translogUUID, translog.currentFileGeneration(), maxSeqNo));
 
             // commit is good, global checkpoint is above max
             assertThat(PeerRecoveryTargetService.getStartingSeqNo(recoveryTarget), equalTo(localCheckpoint + 1));
@@ -116,7 +114,7 @@ public class PeerRecoveryTargetServiceTests extends IndexShardTestCase {
                 generation,
                 resolve,
                 FileChannel::open,
-                TranslogConfig.DEFAULT_BUFFER_SIZE, () -> globalCheckpoint)) {}
+                TranslogConfig.DEFAULT_BUFFER_SIZE, () -> globalCheckpoint, generation, () -> generation)) {}
         return tempDir;
     }
 

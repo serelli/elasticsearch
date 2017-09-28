@@ -28,6 +28,7 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.lucene.uid.Versions;
@@ -41,7 +42,6 @@ import org.elasticsearch.index.codec.CodecService;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.EngineConfig;
 import org.elasticsearch.index.engine.InternalEngine;
-import org.elasticsearch.index.engine.InternalEngineTests.TranslogHandler;
 import org.elasticsearch.index.fieldvisitor.SingleFieldsVisitor;
 import org.elasticsearch.index.mapper.IdFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext.Document;
@@ -64,6 +64,7 @@ import org.junit.Before;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -98,6 +99,7 @@ public class RefreshListenersTests extends ESTestCase {
         threadPool = new TestThreadPool(getTestName());
         IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("index", Settings.EMPTY);
         ShardId shardId = new ShardId(new Index("index", "_na_"), 1);
+        String allocationId = UUIDs.randomBase64UUID(random());
         Directory directory = newDirectory();
         DirectoryService directoryService = new DirectoryService(shardId, indexSettings) {
             @Override
@@ -115,12 +117,10 @@ public class RefreshListenersTests extends ESTestCase {
                 // we don't need to notify anybody in this test
             }
         };
-        TranslogHandler translogHandler = new TranslogHandler(xContentRegistry(), shardId.getIndexName(), Settings.EMPTY, logger);
-        EngineConfig config = new EngineConfig(EngineConfig.OpenMode.CREATE_INDEX_AND_TRANSLOG, shardId, threadPool, indexSettings, null,
-                store, newMergePolicy(), iwc.getAnalyzer(),
-                iwc.getSimilarity(), new CodecService(null, logger), eventListener, translogHandler,
-                IndexSearcher.getDefaultQueryCache(), IndexSearcher.getDefaultQueryCachingPolicy(), translogConfig,
-                TimeValue.timeValueMinutes(5), listeners, null);
+        EngineConfig config = new EngineConfig(EngineConfig.OpenMode.CREATE_INDEX_AND_TRANSLOG, shardId, allocationId, threadPool,
+                indexSettings, null, store, newMergePolicy(), iwc.getAnalyzer(), iwc.getSimilarity(), new CodecService(null, logger),
+                eventListener, IndexSearcher.getDefaultQueryCache(), IndexSearcher.getDefaultQueryCachingPolicy(), false, translogConfig,
+                TimeValue.timeValueMinutes(5), Collections.singletonList(listeners), null, null);
         engine = new InternalEngine(config);
         listeners.setTranslog(engine.getTranslog());
     }
@@ -298,7 +298,7 @@ public class RefreshListenersTests extends ESTestCase {
                         listener.assertNoError();
 
                         Engine.Get get = new Engine.Get(false, "test", threadId, new Term(IdFieldMapper.NAME, threadId));
-                        try (Engine.GetResult getResult = engine.get(get)) {
+                        try (Engine.GetResult getResult = engine.get(get, engine::acquireSearcher)) {
                             assertTrue("document not found", getResult.exists());
                             assertEquals(iteration, getResult.version());
                             SingleFieldsVisitor visitor = new SingleFieldsVisitor("test");

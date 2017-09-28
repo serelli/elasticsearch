@@ -19,7 +19,6 @@
 
 package org.elasticsearch.index.reindex;
 
-import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.common.settings.Settings;
@@ -52,9 +51,6 @@ public class RestDeleteByQueryAction extends AbstractBulkByQueryRestHandler<Dele
 
     @Override
     protected DeleteByQueryRequest buildRequest(RestRequest request) throws IOException {
-        if (false == request.hasContent()) {
-            throw new ElasticsearchException("_delete_by_query requires a request body");
-        }
         /*
          * Passing the search request through DeleteByQueryRequest first allows
          * it to set its own defaults which differ from SearchRequest's

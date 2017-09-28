@@ -44,8 +44,8 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.settings.loader.SettingsLoader;
 import org.elasticsearch.common.xcontent.ToXContent;
+import org.elasticsearch.common.xcontent.ToXContentFragment;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
@@ -76,7 +76,7 @@ import static org.elasticsearch.cluster.node.DiscoveryNodeFilters.OpType.OR;
 import static org.elasticsearch.common.settings.Settings.readSettingsFromStream;
 import static org.elasticsearch.common.settings.Settings.writeSettingsToStream;
 
-public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
+public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragment {
 
     /**
      * This class will be removed in v7.0
@@ -258,6 +258,13 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
                       ActiveShardCount::parseString,
                       Setting.Property.Dynamic,
                       Setting.Property.IndexScope);
+
+    /**
+     * an internal index format description, allowing us to find out if this index is upgraded or needs upgrading
+     */
+    private static final String INDEX_FORMAT = "index.format";
+    public static final Setting<Integer> INDEX_FORMAT_SETTING =
+            Setting.intSetting(INDEX_FORMAT, 0, Setting.Property.IndexScope, Setting.Property.Final);
 
     public static final String KEY_IN_SYNC_ALLOCATIONS = "in_sync_allocations";
     static final String KEY_VERSION = "version";
@@ -1051,6 +1058,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
             }
 
             final String uuid = settings.get(SETTING_INDEX_UUID, INDEX_UUID_NA_VALUE);
+
             return new IndexMetaData(new Index(index, uuid), version, primaryTerms, state, numberOfShards, numberOfReplicas, tmpSettings, mappings.build(),
                 tmpAliases.build(), customs.build(), filledInSyncAllocationIds.build(), requireFilters, initialRecoveryFilters, includeFilters, excludeFilters,
                 indexCreatedVersion, indexUpgradedVersion, getRoutingNumShards(), routingPartitionSize, waitForActiveShards);
@@ -1134,7 +1142,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
                     currentFieldName = parser.currentName();
                 } else if (token == XContentParser.Token.START_OBJECT) {
                     if (KEY_SETTINGS.equals(currentFieldName)) {
-                        builder.settings(Settings.builder().put(SettingsLoader.Helper.loadNestedFromMap(parser.mapOrdered())));
+                        builder.settings(Settings.fromXContent(parser));
                     } else if (KEY_MAPPINGS.equals(currentFieldName)) {
                         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
                             if (token == XContentParser.Token.FIELD_NAME) {
@@ -1318,7 +1326,7 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContent {
      * @param sourceIndexMetadata the metadata of the source index
      * @param targetNumberOfShards the total number of shards in the target index
      * @return the routing factor for and shrunk index with the given number of target shards.
-     * @throws IllegalArgumentException if the number of source shards is greater than the number of target shards or if the source shards
+     * @throws IllegalArgumentException if the number of source shards is less than the number of target shards or if the source shards
      * are not divisible by the number of target shards.
      */
     public static int getRoutingFactor(IndexMetaData sourceIndexMetadata, int targetNumberOfShards) {

@@ -19,7 +19,6 @@
 
 package org.elasticsearch.script.mustache;
 
-import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.common.ParseField;
@@ -71,7 +70,7 @@ public class RestSearchTemplateAction extends BaseRestHandler {
             } else {
                 request.setScript(parser.text());
             }
-        }, new ParseField("inline", "template"), ObjectParser.ValueType.OBJECT_OR_STRING);
+        }, new ParseField("source", "inline", "template"), ObjectParser.ValueType.OBJECT_OR_STRING);
     }
 
     public RestSearchTemplateAction(Settings settings, RestController controller) {
@@ -92,13 +91,9 @@ public class RestSearchTemplateAction extends BaseRestHandler {
 
     @Override
     public RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
-        if (request.hasContentOrSourceParam() == false) {
-            throw new ElasticsearchException("request body is required");
-        }
-
         // Creates the search request with all required params
         SearchRequest searchRequest = new SearchRequest();
-        RestSearchAction.parseSearchRequest(searchRequest, request, null);
+        RestSearchAction.parseSearchRequest(searchRequest, request, null, size -> searchRequest.source().size(size));
 
         // Creates the search template request
         SearchTemplateRequest searchTemplateRequest;

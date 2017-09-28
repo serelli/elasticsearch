@@ -25,13 +25,12 @@ import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.search.SearchPhaseExecutionException;
 import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.bytes.BytesArray;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
@@ -53,15 +52,6 @@ public class LegacyChildQuerySearchIT extends ChildQuerySearchIT {
     @Override
     protected boolean legacy() {
         return true;
-    }
-
-    @Override
-    public Settings indexSettings() {
-        Settings indexSettings = super.indexSettings();
-        return Settings.builder()
-            .put(indexSettings)
-            .put("index.mapping.single_type", false)
-            .build();
     }
 
     public void testIndexChildDocWithNoParentMapping() throws IOException {
@@ -179,7 +169,7 @@ public class LegacyChildQuerySearchIT extends ChildQuerySearchIT {
         BulkRequestBuilder builder = client().prepareBulk();
 
         // It's important to use JSON parsing here and request objects: issue 3444 is related to incomplete option parsing
-        byte[] addParent = new BytesArray(
+        byte[] addParent = (
             "{" +
                 "  \"index\" : {" +
                 "    \"_index\" : \"test\"," +
@@ -191,9 +181,9 @@ public class LegacyChildQuerySearchIT extends ChildQuerySearchIT {
                 "{" +
                 "  \"field1\" : \"value1\"" +
                 "}" +
-                "\n").array();
+                "\n").getBytes(StandardCharsets.UTF_8);
 
-        byte[] addChild = new BytesArray(
+        byte[] addChild = (
             "{" +
                 "  \"update\" : {" +
                 "    \"_index\" : \"test\"," +
@@ -209,7 +199,7 @@ public class LegacyChildQuerySearchIT extends ChildQuerySearchIT {
                 "  }," +
                 "  \"doc_as_upsert\" : \"true\"" +
                 "}" +
-                "\n").array();
+                "\n").getBytes(StandardCharsets.UTF_8);
 
         builder.add(addParent, 0, addParent.length, XContentType.JSON);
         builder.add(addChild, 0, addChild.length, XContentType.JSON);
@@ -241,7 +231,7 @@ public class LegacyChildQuerySearchIT extends ChildQuerySearchIT {
 
         BulkRequestBuilder builder = client().prepareBulk();
 
-        byte[] addParent = new BytesArray(
+        byte[] addParent = (
             "{" +
                 "  \"index\" : {" +
                 "    \"_index\" : \"test\"," +
@@ -253,9 +243,9 @@ public class LegacyChildQuerySearchIT extends ChildQuerySearchIT {
                 "{" +
                 "  \"field1\" : \"value1\"" +
                 "}" +
-                "\n").array();
+                "\n").getBytes(StandardCharsets.UTF_8);
 
-        byte[] addChild1 = new BytesArray(
+        byte[] addChild1 = (
             "{" +
                 "  \"update\" : {" +
                 "    \"_index\" : \"test\"," +
@@ -274,9 +264,9 @@ public class LegacyChildQuerySearchIT extends ChildQuerySearchIT {
                 "    \"field1\" : \"value1'\"" +
                 "  }" +
                 "}" +
-                "\n").array();
+                "\n").getBytes(StandardCharsets.UTF_8);
 
-        byte[] addChild2 = new BytesArray(
+        byte[] addChild2 = (
             "{" +
                 "  \"update\" : {" +
                 "    \"_index\" : \"test\"," +
@@ -292,7 +282,7 @@ public class LegacyChildQuerySearchIT extends ChildQuerySearchIT {
                 "    \"field1\" : \"value1'\"" +
                 "  }" +
                 "}" +
-                "\n").array();
+                "\n").getBytes(StandardCharsets.UTF_8);
 
         builder.add(addParent, 0, addParent.length, XContentType.JSON);
         builder.add(addChild1, 0, addChild1.length, XContentType.JSON);
