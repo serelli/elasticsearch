@@ -1,20 +1,9 @@
 #
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
-# the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License
+# 2.0 and the Server Side Public License, v 1; you may not use this file except
+# in compliance with, at your election, the Elastic License 2.0 or the Server
+# Side Public License, v 1.
 #
 
 #
@@ -24,7 +13,7 @@
 
 #### Interfaces
 
-class BaseStream -> java.util.stream.BaseStream {
+class java.util.stream.BaseStream {
   void close()
   boolean isParallel()
   Iterator iterator()
@@ -33,7 +22,7 @@ class BaseStream -> java.util.stream.BaseStream {
   BaseStream unordered()
 }
 
-class Collector -> java.util.stream.Collector {
+class java.util.stream.Collector {
   BiConsumer accumulator()
   Set characteristics()
   BinaryOperator combiner()
@@ -43,7 +32,7 @@ class Collector -> java.util.stream.Collector {
   Supplier supplier()
 }
 
-class DoubleStream -> java.util.stream.DoubleStream {
+class java.util.stream.DoubleStream {
   boolean allMatch(DoublePredicate)
   boolean anyMatch(DoublePredicate)
   OptionalDouble average()
@@ -82,12 +71,12 @@ class DoubleStream -> java.util.stream.DoubleStream {
   double[] toArray()
 }
 
-class DoubleStream.Builder -> java.util.stream.DoubleStream$Builder {
+class java.util.stream.DoubleStream$Builder {
   DoubleStream.Builder add(double)
   DoubleStream build()
 }
 
-class IntStream -> java.util.stream.IntStream {
+class java.util.stream.IntStream {
   boolean allMatch(IntPredicate)
   boolean anyMatch(IntPredicate)
   DoubleStream asDoubleStream()
@@ -130,12 +119,12 @@ class IntStream -> java.util.stream.IntStream {
   int[] toArray()
 }
 
-class IntStream.Builder -> java.util.stream.IntStream$Builder {
+class java.util.stream.IntStream$Builder {
   IntStream.Builder add(int)
   IntStream build()
 }
 
-class LongStream -> java.util.stream.LongStream {
+class java.util.stream.LongStream {
   boolean allMatch(LongPredicate)
   boolean anyMatch(LongPredicate)
   DoubleStream asDoubleStream()
@@ -177,12 +166,12 @@ class LongStream -> java.util.stream.LongStream {
   long[] toArray()
 }
 
-class LongStream.Builder -> java.util.stream.LongStream$Builder {
+class java.util.stream.LongStream$Builder {
   LongStream.Builder add(long)
   LongStream build()
 }
 
-class Stream -> java.util.stream.Stream {
+class java.util.stream.Stream {
   boolean allMatch(Predicate)
   boolean anyMatch(Predicate)
   Stream.Builder builder()
@@ -221,14 +210,14 @@ class Stream -> java.util.stream.Stream {
   def[] toArray(IntFunction)
 }
 
-class Stream.Builder -> java.util.stream.Stream$Builder {
+class java.util.stream.Stream$Builder {
   Stream.Builder add(def)
   Stream build()
 }
 
 #### Classes
 
-class Collectors -> java.util.stream.Collectors {
+class java.util.stream.Collectors {
   Collector averagingDouble(ToDoubleFunction)
   Collector averagingInt(ToIntFunction)
   Collector averagingLong(ToLongFunction)
@@ -264,7 +253,7 @@ class Collectors -> java.util.stream.Collectors {
 
 #### Enums
 
-class Collector.Characteristics -> java.util.stream.Collector$Characteristics {
+class java.util.stream.Collector$Characteristics {
   Collector.Characteristics CONCURRENT
   Collector.Characteristics IDENTITY_FINISH
   Collector.Characteristics UNORDERED

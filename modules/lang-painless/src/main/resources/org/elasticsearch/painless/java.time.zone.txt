@@ -1,20 +1,9 @@
 #
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
-# the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License
+# 2.0 and the Server Side Public License, v 1; you may not use this file except
+# in compliance with, at your election, the Elastic License 2.0 or the Server
+# Side Public License, v 1.
 #
 
 #
@@ -24,7 +13,7 @@
 
 #### Classes
 
-class ZoneOffsetTransition -> java.time.zone.ZoneOffsetTransition {
+class java.time.zone.ZoneOffsetTransition {
   int compareTo(ZoneOffsetTransition)
   LocalDateTime getDateTimeAfter()
   LocalDateTime getDateTimeBefore()
@@ -39,7 +28,7 @@ class ZoneOffsetTransition -> java.time.zone.ZoneOffsetTransition {
   long toEpochSecond()
 }
 
-class ZoneOffsetTransitionRule -> java.time.zone.ZoneOffsetTransitionRule {
+class java.time.zone.ZoneOffsetTransitionRule {
   ZoneOffsetTransition createTransition(int)
   int getDayOfMonthIndicator()
   DayOfWeek getDayOfWeek()
@@ -53,7 +42,7 @@ class ZoneOffsetTransitionRule -> java.time.zone.ZoneOffsetTransitionRule {
   ZoneOffsetTransitionRule of(Month,int,DayOfWeek,LocalTime,boolean,ZoneOffsetTransitionRule.TimeDefinition,ZoneOffset,ZoneOffset,ZoneOffset)
 }
 
-class ZoneRules -> java.time.zone.ZoneRules {
+class java.time.zone.ZoneRules {
   Duration getDaylightSavings(Instant)
   ZoneOffset getOffset(Instant)
   ZoneOffset getStandardOffset(Instant)
@@ -70,7 +59,7 @@ class ZoneRules -> java.time.zone.ZoneRules {
   ZoneOffsetTransition previousTransition(Instant)
 }
 
-class ZoneRulesProvider -> java.time.zone.ZoneRulesProvider {
+class java.time.zone.ZoneRulesProvider {
   Set getAvailableZoneIds()
   ZoneRules getRules(String,boolean)
   NavigableMap getVersions(String)
@@ -78,7 +67,7 @@ class ZoneRulesProvider -> java.time.zone.ZoneRulesProvider {
 
 #### Enums
 
-class ZoneOffsetTransitionRule.TimeDefinition -> java.time.zone.ZoneOffsetTransitionRule$TimeDefinition {
+class java.time.zone.ZoneOffsetTransitionRule$TimeDefinition {
   ZoneOffsetTransitionRule.TimeDefinition STANDARD
   ZoneOffsetTransitionRule.TimeDefinition UTC
   ZoneOffsetTransitionRule.TimeDefinition WALL
@@ -89,6 +78,6 @@ class ZoneOffsetTransitionRule.TimeDefinition -> java.time.zone.ZoneOffsetTransi
 
 #### Exceptions
 
-class ZoneRulesException -> java.time.zone.ZoneRulesException {
+class java.time.zone.ZoneRulesException {
   (String)
 }

@@ -1,37 +1,31 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.script.mustache;
 
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.TransportVersions;
 import org.elasticsearch.action.ActionResponse;
-import org.elasticsearch.common.Nullable;
+import org.elasticsearch.action.search.MultiSearchResponse;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.io.stream.Streamable;
-import org.elasticsearch.common.xcontent.ToXContent;
-import org.elasticsearch.common.xcontent.ToXContentObject;
-import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.core.Nullable;
+import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.xcontent.ToXContent;
+import org.elasticsearch.xcontent.ToXContentObject;
+import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xcontent.XContentParser;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Iterator;
 
 public class MultiSearchTemplateResponse extends ActionResponse implements Iterable<MultiSearchTemplateResponse.Item>, ToXContentObject {
@@ -39,11 +33,18 @@ public class MultiSearchTemplateResponse extends ActionResponse implements Itera
     /**
      * A search template response item, holding the actual search template response, or an error message if it failed.
      */
-    public static class Item implements Streamable {
-        private SearchTemplateResponse response;
-        private Exception exception;
+    public static class Item implements Writeable {
+        private final SearchTemplateResponse response;
+        private final Exception exception;
 
-        Item() {
+        private Item(StreamInput in) throws IOException {
+            if (in.readBoolean()) {
+                this.response = new SearchTemplateResponse(in);
+                this.exception = null;
+            } else {
+                exception = in.readException();
+                this.response = null;
+            }
         }
 
         public Item(SearchTemplateResponse response, Exception exception) {
@@ -74,22 +75,6 @@ public class MultiSearchTemplateResponse extends ActionResponse implements Itera
             return this.response;
         }
 
-        public static Item readItem(StreamInput in) throws IOException {
-            Item item = new Item();
-            item.readFrom(in);
-            return item;
-        }
-
-        @Override
-        public void readFrom(StreamInput in) throws IOException {
-            if (in.readBoolean()) {
-                this.response = new SearchTemplateResponse();
-                response.readFrom(in);
-            } else {
-                exception = in.readException();
-            }
-        }
-
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             if (response != null) {
@@ -104,20 +89,34 @@ public class MultiSearchTemplateResponse extends ActionResponse implements Itera
         public Exception getFailure() {
             return exception;
         }
+
+        @Override
+        public String toString() {
+            return "Item [response=" + response + ", exception=" + exception + "]";
+        }
     }
 
-    private Item[] items;
+    private final Item[] items;
+    private final long tookInMillis;
 
-    MultiSearchTemplateResponse() {
+    MultiSearchTemplateResponse(StreamInput in) throws IOException {
+        super(in);
+        items = in.readArray(Item::new, Item[]::new);
+        if (in.getTransportVersion().onOrAfter(TransportVersions.V_7_0_0)) {
+            tookInMillis = in.readVLong();
+        } else {
+            tookInMillis = -1L;
+        }
     }
 
-    public MultiSearchTemplateResponse(Item[] items) {
+    MultiSearchTemplateResponse(Item[] items, long tookInMillis) {
         this.items = items;
+        this.tookInMillis = tookInMillis;
     }
 
     @Override
     public Iterator<Item> iterator() {
-        return Arrays.stream(items).iterator();
+        return Iterators.forArray(items);
     }
 
     /**
@@ -127,36 +126,36 @@ public class MultiSearchTemplateResponse extends ActionResponse implements Itera
         return this.items;
     }
 
-    @Override
-    public void readFrom(StreamInput in) throws IOException {
-        super.readFrom(in);
-        items = new Item[in.readVInt()];
-        for (int i = 0; i < items.length; i++) {
-            items[i] = Item.readItem(in);
-        }
+    /**
+     * How long the msearch_template took.
+     */
+    public TimeValue getTook() {
+        return new TimeValue(tookInMillis);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeVInt(items.length);
-        for (Item item : items) {
-            item.writeTo(out);
+        out.writeArray(items);
+        if (out.getTransportVersion().onOrAfter(TransportVersions.V_7_0_0)) {
+            out.writeVLong(tookInMillis);
         }
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         builder.startObject();
+        builder.field("took", tookInMillis);
         builder.startArray(Fields.RESPONSES);
         for (Item item : items) {
+            builder.startObject();
             if (item.isFailure()) {
-                builder.startObject();
                 ElasticsearchException.generateFailureXContent(builder, params, item.getFailure(), true);
-                builder.endObject();
+                builder.field(Fields.STATUS, ExceptionsHelper.status(item.getFailure()).getStatus());
             } else {
-                item.getResponse().toXContent(builder, params);
+                item.getResponse().innerToXContent(builder, params);
+                builder.field(Fields.STATUS, item.getResponse().status().getStatus());
             }
+            builder.endObject();
         }
         builder.endArray();
         builder.endObject();
@@ -165,6 +164,24 @@ public class MultiSearchTemplateResponse extends ActionResponse implements Itera
 
     static final class Fields {
         static final String RESPONSES = "responses";
+        static final String STATUS = "status";
+    }
+
+    public static MultiSearchTemplateResponse fromXContext(XContentParser parser) {
+        // The MultiSearchTemplateResponse is identical to the multi search response so we reuse the parsing logic in multi search response
+        MultiSearchResponse mSearchResponse = MultiSearchResponse.fromXContext(parser);
+        org.elasticsearch.action.search.MultiSearchResponse.Item[] responses = mSearchResponse.getResponses();
+        Item[] templateResponses = new Item[responses.length];
+        int i = 0;
+        for (org.elasticsearch.action.search.MultiSearchResponse.Item item : responses) {
+            SearchTemplateResponse stResponse = null;
+            if (item.getResponse() != null) {
+                stResponse = new SearchTemplateResponse();
+                stResponse.setResponse(item.getResponse());
+            }
+            templateResponses[i++] = new Item(stResponse, item.getFailure());
+        }
+        return new MultiSearchTemplateResponse(templateResponses, mSearchResponse.getTook().millis());
     }
 
     @Override

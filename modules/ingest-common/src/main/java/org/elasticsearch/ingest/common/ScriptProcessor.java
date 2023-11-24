@@ -1,45 +1,35 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.ingest.common;
 
-import org.apache.logging.log4j.Logger;
-import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.logging.DeprecationLogger;
-import org.elasticsearch.common.logging.ESLoggerFactory;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.ingest.AbstractProcessor;
 import org.elasticsearch.ingest.IngestDocument;
 import org.elasticsearch.ingest.Processor;
-import org.elasticsearch.script.ExecutableScript;
+import org.elasticsearch.script.IngestScript;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptException;
 import org.elasticsearch.script.ScriptService;
+import org.elasticsearch.script.ScriptType;
+import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xcontent.XContentParser;
+import org.elasticsearch.xcontent.XContentParserConfiguration;
+import org.elasticsearch.xcontent.XContentType;
+import org.elasticsearch.xcontent.json.JsonXContent;
 
+import java.io.InputStream;
+import java.util.Arrays;
 import java.util.Map;
 
-import static java.util.Collections.emptyMap;
-import static org.elasticsearch.common.Strings.hasLength;
 import static org.elasticsearch.ingest.ConfigurationUtils.newConfigurationException;
-import static org.elasticsearch.ingest.ConfigurationUtils.readOptionalMap;
-import static org.elasticsearch.ingest.ConfigurationUtils.readOptionalStringProperty;
-import static org.elasticsearch.script.ScriptType.INLINE;
-import static org.elasticsearch.script.ScriptType.STORED;
 
 /**
  * Processor that evaluates a script with an ingest document in its context.
@@ -50,17 +40,26 @@ public final class ScriptProcessor extends AbstractProcessor {
 
     private final Script script;
     private final ScriptService scriptService;
+    private final IngestScript.Factory precompiledIngestScriptFactory;
 
     /**
      * Processor that evaluates a script with an ingest document in its context
-     *
-     * @param tag The processor's tag.
+     *  @param tag The processor's tag.
+     * @param description The processor's description.
      * @param script The {@link Script} to execute.
+     * @param precompiledIngestScriptFactory The {@link Script} precompiled script
      * @param scriptService The {@link ScriptService} used to execute the script.
      */
-    ScriptProcessor(String tag, Script script, ScriptService scriptService)  {
-        super(tag);
+    ScriptProcessor(
+        String tag,
+        String description,
+        Script script,
+        @Nullable IngestScript.Factory precompiledIngestScriptFactory,
+        ScriptService scriptService
+    ) {
+        super(tag, description);
         this.script = script;
+        this.precompiledIngestScriptFactory = precompiledIngestScriptFactory;
         this.scriptService = scriptService;
     }
 
@@ -70,11 +69,14 @@ public final class ScriptProcessor extends AbstractProcessor {
      * @param document The Ingest document passed into the script context under the "ctx" object.
      */
     @Override
-    public void execute(IngestDocument document) {
-        ExecutableScript.Factory factory = scriptService.compile(script, ExecutableScript.INGEST_CONTEXT);
-        ExecutableScript executableScript = factory.newInstance(script.getParams());
-        executableScript.setNextVar("ctx",  document.getSourceAndMetadata());
-        executableScript.run();
+    public IngestDocument execute(IngestDocument document) {
+        document.doNoSelfReferencesCheck(true);
+        IngestScript.Factory factory = precompiledIngestScriptFactory;
+        if (factory == null) {
+            factory = scriptService.compile(script, IngestScript.CONTEXT);
+        }
+        factory.newInstance(script.getParams(), document.getCtxMap()).execute();
+        return document;
     }
 
     @Override
@@ -86,10 +88,11 @@ public final class ScriptProcessor extends AbstractProcessor {
         return script;
     }
 
-    public static final class Factory implements Processor.Factory {
-        private final Logger logger = ESLoggerFactory.getLogger(Factory.class);
-        private final DeprecationLogger deprecationLogger = new DeprecationLogger(logger);
+    IngestScript.Factory getPrecompiledIngestScriptFactory() {
+        return precompiledIngestScriptFactory;
+    }
 
+    public static final class Factory implements Processor.Factory {
         private final ScriptService scriptService;
 
         public Factory(ScriptService scriptService) {
@@ -97,59 +100,35 @@ public final class ScriptProcessor extends AbstractProcessor {
         }
 
         @Override
-        @SuppressWarnings("unchecked")
-        public ScriptProcessor create(Map<String, Processor.Factory> registry, String processorTag,
-                                      Map<String, Object> config) throws Exception {
-            String lang = readOptionalStringProperty(TYPE, processorTag, config, "lang");
-            String source = readOptionalStringProperty(TYPE, processorTag, config, "source");
-            String id = readOptionalStringProperty(TYPE, processorTag, config, "id");
-            Map<String, ?> params = readOptionalMap(TYPE, processorTag, config, "params");
+        public ScriptProcessor create(
+            Map<String, Processor.Factory> registry,
+            String processorTag,
+            String description,
+            Map<String, Object> config
+        ) throws Exception {
+            try (
+                XContentBuilder builder = XContentBuilder.builder(JsonXContent.jsonXContent).map(config);
+                InputStream stream = BytesReference.bytes(builder).streamInput();
+                XContentParser parser = XContentType.JSON.xContent()
+                    .createParser(XContentParserConfiguration.EMPTY.withDeprecationHandler(LoggingDeprecationHandler.INSTANCE), stream)
+            ) {
+                Script script = Script.parse(parser);
 
-            if (source == null) {
-                source = readOptionalStringProperty(TYPE, processorTag, config, "inline");
-                if (source != null) {
-                    deprecationLogger.deprecated("Specifying script source with [inline] is deprecated, use [source] instead.");
+                Arrays.asList("id", "source", "inline", "lang", "params", "options").forEach(config::remove);
+
+                // verify script is able to be compiled before successfully creating processor.
+                IngestScript.Factory ingestScriptFactory = null;
+                try {
+                    ingestScriptFactory = scriptService.compile(script, IngestScript.CONTEXT);
+                    if (ScriptType.STORED.equals(script.getType())) {
+                        // do not cache stored scripts lest they change and invalidate the cached value
+                        ingestScriptFactory = null;
+                    }
+                } catch (ScriptException e) {
+                    throw newConfigurationException(TYPE, processorTag, null, e);
                 }
+                return new ScriptProcessor(processorTag, description, script, ingestScriptFactory, scriptService);
             }
-
-            boolean containsNoScript = !hasLength(id) && !hasLength(source);
-            if (containsNoScript) {
-                throw newConfigurationException(TYPE, processorTag, null, "Need [id] or [source] parameter to refer to scripts");
-            }
-
-            boolean moreThanOneConfigured = Strings.hasLength(id) && Strings.hasLength(source);
-            if (moreThanOneConfigured) {
-                throw newConfigurationException(TYPE, processorTag, null, "Only one of [id] or [source] may be configured");
-            }
-
-            if (lang == null) {
-                lang = Script.DEFAULT_SCRIPT_LANG;
-            }
-
-            if (params == null) {
-                params = emptyMap();
-            }
-
-            final Script script;
-            String scriptPropertyUsed;
-            if (Strings.hasLength(source)) {
-                script = new Script(INLINE, lang, source, (Map<String, Object>)params);
-                scriptPropertyUsed = "source";
-            } else if (Strings.hasLength(id)) {
-                script = new Script(STORED, null, id, (Map<String, Object>)params);
-                scriptPropertyUsed = "id";
-            } else {
-                throw newConfigurationException(TYPE, processorTag, null, "Could not initialize script");
-            }
-
-            // verify script is able to be compiled before successfully creating processor.
-            try {
-                scriptService.compile(script, ExecutableScript.INGEST_CONTEXT);
-            } catch (ScriptException e) {
-                throw newConfigurationException(TYPE, processorTag, scriptPropertyUsed, e);
-            }
-
-            return new ScriptProcessor(processorTag, script, scriptService);
         }
     }
 }
